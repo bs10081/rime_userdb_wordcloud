@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rime Input Method Stats</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.0.0/wordcloud2.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        #wordCloudCanvas { width: 100%; height: 500px; display: block; margin: auto; }
+        .container { width: 80%; margin: auto; }
+        select, button { margin: 10px 0; padding: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Rime Input Method Stats</h1>
+        <label for="folderSelect">Select Folder:</label>
+        <select id="folderSelect"></select>
+        
+        <label for="excludeCommonWords">Exclude Common Words:</label>
+        <input type="checkbox" id="excludeCommonWords">
+
+        <button onclick="loadData()">Refresh</button>
+
+        <h2>Word Cloud</h2>
+        <canvas id="wordCloudCanvas"></canvas>
+        
+        <h2>Top 10 Most Used Words</h2>
+        <canvas id="barChart" width="400" height="200"></canvas>
+    </div>
+
+    <script>
+        const folderSelect = document.getElementById('folderSelect');
+        const wordCloudCanvas = document.getElementById('wordCloudCanvas');
+        const excludeCheckbox = document.getElementById('excludeCommonWords');
+        let chartInstance = null;
+
+        // Function to set canvas resolution based on screen size
+        function resizeCanvas() {
+            const dpi = window.devicePixelRatio || 1;
+            wordCloudCanvas.width = wordCloudCanvas.clientWidth * dpi;
+            wordCloudCanvas.height = wordCloudCanvas.clientHeight * dpi;
+        }
+
+        // Fetch and populate the folder list
+        fetch('/folders')
+            .then(response => response.json())
+            .then(data => {
+                const folders = data.folders;
+                folders.forEach(folder => {
+                    const option = document.createElement('option');
+                    option.value = folder;
+                    option.textContent = folder || 'Total';
+                    folderSelect.appendChild(option);
+                });
+                // Set 'Total' as the default option
+                folderSelect.value = 'Total';
+                loadData();
+            });
+
+        // Function to load data for the selected folder
+        function loadData() {
+            const folder = folderSelect.value;
+            const exclude = excludeCheckbox.checked;
+            fetch(`/data/${folder}?exclude=${exclude}`)
+                .then(response => response.json())
+                .then(data => {
+                    const wordData = data.words;
+                    const topWords = data.top_words;
+
+                    // Resize canvas and clear previous word cloud
+                    resizeCanvas();
+                    wordCloudCanvas.getContext('2d').clearRect(0, 0, wordCloudCanvas.width, wordCloudCanvas.height);
+
+                    // Generate word cloud
+                    const wordList = wordData.map(item => [item.word, item.count]);
+                    WordCloud(wordCloudCanvas, {
+                        list: wordList,
+                        gridSize: 8,
+                        weightFactor: 15,
+                        color: 'random-dark',
+                        backgroundColor: '#fff',
+                        rotateRatio: 0.3,
+                        minRotation: -Math.PI / 6,
+                        maxRotation: Math.PI / 6,
+                        shrinkToFit: true,
+                        fontFamily: 'Arial, sans-serif',
+                        drawOutOfBound: false
+                    });
+
+                    // Generate bar chart
+                    if (chartInstance) chartInstance.destroy();
+                    const ctx = document.getElementById('barChart').getContext('2d');
+                    chartInstance = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: topWords.map(item => item.word),
+                            datasets: [{
+                                label: 'Usage Count',
+                                data: topWords.map(item => item.count),
+                                backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: {
+                                y: { beginAtZero: true }
+                            }
+                        }
+                    });
+                });
+        }
+
+        // Event listener for folder selection
+        folderSelect.addEventListener('change', loadData);
+        excludeCheckbox.addEventListener('change', loadData);
+    </script>
+</body>
+</html>
